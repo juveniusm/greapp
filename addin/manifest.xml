@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xsi:type="ContentApp">
+  <Id>52b52d0d-e5a8-4bf0-9093-37f0e1da66a6</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Juvenius Martin</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="Gradient Echo" />
+  <Description DefaultValue="Interactive gradient echo visualization. Fire an RF pulse, apply a dephasing gradient, then reverse it to refocus the spins as a gradient echo. Shows that the echo peak rides the T2* envelope (not T2) — the defining limitation of GRE versus spin echo." />
+  <IconUrl DefaultValue="https://juveniusm.github.io/greapp/addin/icon-64.png" />
+  <HighResolutionIconUrl DefaultValue="https://juveniusm.github.io/greapp/addin/icon-128.png" />
+  <SupportUrl DefaultValue="https://github.com/juveniusm/greapp" />
+  <AppDomains>
+    <AppDomain>https://juveniusm.github.io</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Presentation" />
+  </Hosts>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://juveniusm.github.io/greapp/index.html" />
+    <RequestedHeight>600</RequestedHeight>
+    <RequestedWidth>800</RequestedWidth>
+  </DefaultSettings>
+  <Permissions>Restricted</Permissions>
+</OfficeApp>

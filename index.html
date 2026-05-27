@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Gradient Echo — Dephase, Refocus, Echo</title>
+<style>
+  :root{
+    --bg:#e2efeb;
+    --bg2:#c9ddd6;
+    --ink:#2c4744;
+    --t2:#2f4858;
+    --t2star:#a08a4a;
+    --signal:#c0392b;
+    --accent:#2c7378;
+    --muted:#6f8482;
+    --card:#ffffffcc;
+    --border:#b5cbc5;
+    --arrow:#f3cf4a;
+    --arrow-bright:#fff0a8;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:linear-gradient(180deg,var(--bg) 0%,var(--bg2) 100%);}
+  .app{max-width:1240px;margin:0 auto;padding:18px 20px 28px}
+  header{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:10px}
+  h1{font-size:22px;margin:0;font-weight:600;letter-spacing:.2px}
+  header p{margin:0;color:var(--muted);font-size:13px;max-width:780px}
+  .grid{display:grid;grid-template-columns:1fr 320px;gap:16px}
+  @media (max-width:900px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 14px 10px;box-shadow:0 1px 0 #ffffff80 inset,0 6px 20px -16px #00000033;}
+  canvas{display:block;width:100%;height:auto;border-radius:10px;background:#4d6a68}
+  .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  button{cursor:pointer;border:1px solid var(--border);background:#ffffff;color:var(--ink);padding:9px 12px;border-radius:10px;font-size:13px;font-weight:600;transition:transform .05s ease, background .15s ease, border-color .15s ease;}
+  button:hover{background:#eef6f3;border-color:#9bb8b1}
+  button:active{transform:translateY(1px)}
+  button.primary{background:var(--accent);color:#fff;border-color:#1f5d61}
+  button.primary:hover{background:#256468}
+  button.gradBtn{background:#4a9b9f;color:#fff;border-color:#357c80}
+  button.gradBtn:hover{background:#3f8a8e}
+  button.refocusBtn{background:#1f5a5e;color:#fff;border-color:#143f43}
+  button.refocusBtn:hover{background:#194e52}
+  button.warn{background:#c97369;color:#fff;border-color:#a8584f}
+  button.warn:hover{background:#b9645a}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .panel h3{margin:0 0 8px;font-size:14px;letter-spacing:.3px;text-transform:uppercase;color:#445}
+  .control{margin:10px 0}
+  .control label{display:flex;justify-content:space-between;font-size:12px;color:#445;margin-bottom:4px}
+  input[type=range]{width:100%}
+  .status{font-size:13px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-top:8px;min-height:46px;line-height:1.4}
+  .status b{color:var(--accent)}
+  .footnote{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#d4e5e0;color:#2c4744;font-size:11px;margin-right:6px}
+  kbd{font-family:ui-monospace,Menlo,Consolas,monospace;background:#fff;border:1px solid var(--border);border-bottom-width:2px;border-radius:6px;padding:1px 6px;font-size:11px;color:#2c4744}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>Gradient Echo — Dephase, Refocus, Echo</h1>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <canvas id="plot" width="1600" height="1100" aria-label="Spin grid and signal trace"></canvas>
+      <div class="row">
+        <button id="btnRF"    class="primary">Apply RF Pulse</button>
+        <button id="btnPlus"  class="gradBtn"    disabled>Apply +G</button>
+        <button id="btnMinus" class="refocusBtn" disabled>Apply −G</button>
+        <button id="btnAuto">Auto-Play</button>
+        <button id="btnPause">Pause</button>
+        <button id="btnReset" class="warn">Reset</button>
+      </div>
+      <div class="status" id="status">
+        Ready. Click <b>Apply RF Pulse</b> to tip the spins into the transverse plane.
+      </div>
+    </div>
+
+    <aside class="card panel">
+      <h3>Controls</h3>
+
+      <div class="control">
+        <label>Gradient strength <span id="gVal">1.0</span></label>
+        <input id="gSlider" type="range" min="0.3" max="2.0" step="0.05" value="1.0" />
+      </div>
+
+      <div class="control">
+        <label>T2* inhomogeneity <span id="t2sVal">none</span></label>
+        <input id="t2sSlider" type="range" min="0" max="2" step="0.05" value="0" />
+      </div>
+
+      <div class="control">
+        <label>Animation speed <span id="spdVal">1.0×</span></label>
+        <input id="spdSlider" type="range" min="0.25" max="3" step="0.05" value="1" />
+      </div>
+
+      <div class="control">
+        <label>Grid size <span id="gridVal">9 × 5</span></label>
+        <input id="gridSlider" type="range" min="5" max="13" step="2" value="9" />
+      </div>
+
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  const plot = document.getElementById('plot');
+  const ctx  = plot.getContext('2d');
+  const statusEl = document.getElementById('status');
+
+  const btnRF    = document.getElementById('btnRF');
+  const btnPlus  = document.getElementById('btnPlus');
+  const btnMinus = document.getElementById('btnMinus');
+  const btnAuto  = document.getElementById('btnAuto');
+  const btnPause = document.getElementById('btnPause');
+  const btnReset = document.getElementById('btnReset');
+  const gSlider     = document.getElementById('gSlider');
+  const t2sSlider   = document.getElementById('t2sSlider');
+  const spdSlider   = document.getElementById('spdSlider');
+  const gridSlider  = document.getElementById('gridSlider');
+  const gVal=document.getElementById('gVal'), t2sVal=document.getElementById('t2sVal'),
+        spdVal=document.getElementById('spdVal'),
+        gridVal=document.getElementById('gridVal');
+
+  // State machine: 'idle' (pre-RF) → 'rf' (tipped, gradient off) → 'plus' (+G on) → 'minus' (−G on).
+  // Phase only accrues in 'plus' (into t_plus) and 'minus' (into t_minus). The echo is at t_plus = t_minus.
+  const State = {
+    phase: 'idle',
+    paused: false,
+    speed: 1,
+    G: 1.0,
+    inhom: 1.0,
+    cols: 9,
+    rows: 5,
+    t_plus: 0,
+    t_minus: 0,
+    autoMode: false,
+    echoPaused: false,    // becomes true after the one-shot auto-pause at TE fires
+    randSeed: 1,
+    randomOffsets: [],
+    restAngles: [],       // per-(row,col) random angle shown before RF
+    history: [],          // { t, signal } samples
+    historyMax: 800,
+    switches: [],         // { t, kind: 'plus'|'minus' } — recorded on each direction reversal
+    lastDiff: 0,          // t_plus - t_minus from previous tick, for echo zero-crossing detection
+  };
+
+  // One random frequency offset PER COLUMN (shared by all rows) simulates static T2* inhomogeneity.
+  // Offsets stay non-negative so total ω stays ≥ 0 — every spin precesses the same direction.
+  // The mirrored-speed scheme refocuses the gradient component but NOT the random component, so the echo is imperfect.
+  function rebuildOffsets(){
+    State.randomOffsets = [];
+    let s = State.randSeed;
+    const rand = () => { s = (s * 1664525 + 1013904223) >>> 0; return (s & 0xffff)/0xffff; };
+    for (let c=0; c<State.cols; c++){
+      State.randomOffsets.push(rand());
+    }
+  }
+  // Pre-RF visual: arrows scattered at random angles in the transverse plane. RF snaps them upright.
+  function rebuildRestAngles(){
+    State.restAngles = [];
+    let s = State.randSeed ^ 0xA5A5A5A5;
+    const rand = () => { s = (s * 1664525 + 1013904223) >>> 0; return (s & 0xffff)/0xffff; };
+    for (let r=0; r<State.rows; r++){
+      const row = [];
+      for (let c=0; c<State.cols; c++){
+        row.push(rand() * Math.PI * 2);
+      }
+      State.restAngles.push(row);
+    }
+  }
+  rebuildOffsets();
+  rebuildRestAngles();
+
+  // ---- Phase model ----
+  // omega_grad(c) = G_scale · G · (MIN_FRAC + (1-MIN_FRAC) · c/(N-1))   during +G.
+  // MIN_FRAC > 0 ensures the slowest column is slow but NOT stationary — every spin always
+  // rotates. At −G we MIRROR the speed map across the grid: omega_minus(c) = omega_plus(N-1-c).
+  // Every spin still rotates the same direction; only the per-column rate is swapped (fast↔slow).
+  // At t_minus = t_plus the accumulated gradient phase is
+  //   φ_grad(c) = ω(c)·t_plus + ω(N-1-c)·t_plus = (1+MIN_FRAC)·G_SCALE·G·t_plus,
+  // which is INDEPENDENT of c — all spins coalesce to a common (non-zero) angle: the echo.
+  // T2* (the random ω_R term) is not refocused, so it's the only residual fan-out at the echo.
+  const G_SCALE_BASE = 0.030;   // rad/ms at x = 1 when G=1
+  const MIN_FRAC = 0.15;        // slowest column rotates at 15% of the fastest's rate
+  function omegaGradOf(col){
+    const x = col / (State.cols - 1);
+    return G_SCALE_BASE * State.G * (MIN_FRAC + (1 - MIN_FRAC) * x);
+  }
+  const INHOM_BASE = 0.005;
+  function spinPhase(col){
+    const wG_plus  = omegaGradOf(col);
+    const wG_minus = omegaGradOf(State.cols - 1 - col);
+    const wR = (State.randomOffsets[col] || 0) * INHOM_BASE * State.inhom;
+    return wG_plus * State.t_plus + wG_minus * State.t_minus + wR * (State.t_plus + State.t_minus);
+  }
+
+  // Net signal magnitude. All rows in a column share the same phase, so we sum column-wise.
+  function computeSignal(){
+    if (State.phase === 'idle') return 0;
+    let sx = 0, sy = 0;
+    for (let c=0; c<State.cols; c++){
+      const phi = spinPhase(c);
+      sx += Math.sin(phi);
+      sy += Math.cos(phi);
+    }
+    return Math.hypot(sx, sy) / State.cols;
+  }
+
+  // ---- Canvas sizing ----
+  const View = { plotW: 0, plotH: 0, dpr: 1 };
+  function fitCanvas(c, ctx2d){
+    const dpr = window.devicePixelRatio || 1;
+    const rect = c.getBoundingClientRect();
+    const cssW = Math.max(640, Math.floor(rect.width));
+    const cssH = Math.max(560, Math.floor(cssW * 0.66));
+    c.width  = cssW * dpr;
+    c.height = cssH * dpr;
+    c.style.height = cssH + 'px';
+    ctx2d.setTransform(dpr,0,0,dpr,0,0);
+    View.plotW = cssW; View.plotH = cssH; View.dpr = dpr;
+  }
+  fitCanvas(plot, ctx);
+  window.addEventListener('resize', () => { fitCanvas(plot, ctx); draw(); });
+
+  // ---- Drawing ----
+  function draw(){
+    const W = View.plotW, H = View.plotH;
+    ctx.clearRect(0,0,W,H);
+
+    const gridH = Math.floor(H * 0.60);
+    const gap   = 8;
+    const traceH = H - gridH - gap;
+    drawSpinGrid({ x:0, y:0, w:W, h:gridH });
+    drawSignalTrace({ x:0, y:gridH + gap, w:W, h:traceH });
+  }
+
+  function drawSpinGrid(r){
+    const bg = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h);
+    bg.addColorStop(0, '#7a9a97');
+    bg.addColorStop(1, '#4d6a68');
+    ctx.fillStyle = bg;
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+
+    const cols = State.cols, rows = State.rows;
+    const padX = 60, padTop = 40, padBot = 22;
+    const cellW = (r.w - 2*padX) / cols;
+    const cellH = (r.h - padTop - padBot) / rows;
+    const arrowLen = Math.min(cellW, cellH) * 0.42;
+
+    // Per-side speed labels. Defaults to the +G mapping (slow left, fast right); during −G
+    // the speed map is mirrored across the grid, so the labels swap sides too.
+    const leftFast = State.phase === 'minus';
+    ctx.fillStyle = '#e8eef2';
+    ctx.font = '600 13px -apple-system,Segoe UI,Roboto';
+    ctx.textAlign = 'left';
+    ctx.fillText(leftFast ? 'fast precession' : 'slow precession', r.x + padX, r.y + 22);
+    ctx.textAlign = 'right';
+    ctx.fillText(leftFast ? 'slow precession' : 'fast precession', r.x + r.w - padX, r.y + 22);
+    ctx.textAlign = 'start';
+
+    // Faint per-column tint
+    for (let c=0; c<cols; c++){
+      const x = -1 + 2*c/(cols-1);
+      const tint = `rgba(${Math.round(120 + x*40)},${Math.round(140 - Math.abs(x)*20)},${Math.round(170 - x*40)},0.06)`;
+      ctx.fillStyle = tint;
+      ctx.fillRect(r.x + padX + c*cellW, r.y + padTop, cellW, rows*cellH);
+    }
+
+    for (let row=0; row<rows; row++){
+      for (let col=0; col<cols; col++){
+        const cx = r.x + padX + cellW*(col + 0.5);
+        const cy = r.y + padTop + cellH*(row + 0.5);
+        const phi = State.phase === 'idle'
+          ? (State.restAngles[row] ? State.restAngles[row][col] : 0)
+          : spinPhase(col);
+        drawSpinArrow(cx, cy, arrowLen, phi, col, cols);
+      }
+    }
+  }
+
+  function drawSpinArrow(cx, cy, length, angle, col, totalCols){
+    // angle = 0 → up; positive angle rotates clockwise (right-handed in screen coords)
+    const tipX = cx + length * Math.sin(angle);
+    const tipY = cy - length * Math.cos(angle);
+
+    const hue = 48 + (col/(totalCols-1) - 0.5) * 10;
+    const stroke = `hsl(${hue}, 90%, 62%)`;
+    const glow   = `hsla(${hue}, 95%, 70%, 0.7)`;
+
+    ctx.save();
+    ctx.shadowColor = glow;
+    ctx.shadowBlur = 6;
+
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(tipX, tipY);
+    ctx.stroke();
+
+    const headLen = 7, headW = 5;
+    const dx = tipX - cx, dy = tipY - cy;
+    const m = Math.hypot(dx, dy) || 1;
+    const ux = dx/m, uy = dy/m;
+    const baseX = tipX - ux*headLen;
+    const baseY = tipY - uy*headLen;
+    const perpX = -uy, perpY = ux;
+    ctx.fillStyle = stroke;
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(baseX + perpX*headW, baseY + perpY*headW);
+    ctx.lineTo(baseX - perpX*headW, baseY - perpY*headW);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawSignalTrace(r){
+    // Panel background
+    ctx.fillStyle = '#1a2c2e';
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+
+    const padL = 64, padR = 24, padT = 20, padB = 24;
+    const innerX = r.x + padL, innerY = r.y + padT;
+    const innerW = r.w - padL - padR;
+    const innerH = r.h - padT - padB;
+
+    // Pick x-axis range: grow in 100ms steps as time accumulates.
+    const tMaxData = State.history.length ? State.history[State.history.length-1].t : 0;
+    const tMax = Math.max(300, Math.ceil((tMaxData + 20) / 100) * 100);
+
+    // Gridlines (horizontal at 0.25/0.5/0.75/1.0)
+    ctx.strokeStyle = '#2a3d3f';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 4]);
+    for (let v of [0.25, 0.5, 0.75, 1.0]){
+      const yy = innerY + innerH * (1 - v);
+      ctx.beginPath();
+      ctx.moveTo(innerX, yy);
+      ctx.lineTo(innerX + innerW, yy);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    // Axes
+    ctx.strokeStyle = '#4b6663';
+    ctx.beginPath();
+    ctx.moveTo(innerX, innerY + innerH);
+    ctx.lineTo(innerX + innerW, innerY + innerH);
+    ctx.moveTo(innerX, innerY);
+    ctx.lineTo(innerX, innerY + innerH);
+    ctx.stroke();
+
+    // Labels
+    ctx.fillStyle = '#a4bbb7';
+    ctx.font = '11px -apple-system,Segoe UI,Roboto';
+    ctx.textAlign = 'right';
+    ctx.fillText('1.0', innerX - 6, innerY + 4);
+    ctx.fillText('0.5', innerX - 6, innerY + innerH/2 + 4);
+    ctx.fillText('0',   innerX - 6, innerY + innerH + 4);
+    ctx.textAlign = 'center';
+    ctx.fillText('0 ms',                       innerX,                innerY + innerH + 16);
+    ctx.fillText(`${(tMax/2).toFixed(0)} ms`,  innerX + innerW/2,     innerY + innerH + 16);
+    ctx.fillText(`${tMax.toFixed(0)} ms`,      innerX + innerW,       innerY + innerH + 16);
+
+    // Title
+    ctx.fillStyle = '#e8f0ee';
+    ctx.font = '600 12px -apple-system,Segoe UI,Roboto';
+    ctx.textAlign = 'left';
+    ctx.fillText('Net signal  |M(t)|  (normalized)', innerX, r.y + 14);
+
+    // Mark every direction reversal recorded so far.
+    ctx.font = '10px -apple-system,Segoe UI,Roboto';
+    for (let i=0; i<State.switches.length; i++){
+      const sw = State.switches[i];
+      if (sw.t > tMax) continue;
+      const xSw = innerX + innerW * (sw.t / tMax);
+      ctx.strokeStyle = '#6dbab4';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      ctx.moveTo(xSw, innerY);
+      ctx.lineTo(xSw, innerY + innerH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#6dbab4';
+      ctx.textAlign = 'left';
+      ctx.fillText(sw.kind === 'plus' ? '+G on' : '−G on', xSw + 3, innerY + 12);
+    }
+
+    // Echo line: while approaching, predict when the growing accumulator will catch the other.
+    // While auto-paused AT the echo, pin the line to the exact moment (t_plus + t_minus) so the
+    // user still sees the marker after the pause fires.
+    let tEchoPred = null;
+    let echoLabel = 'next echo';
+    if (State.echoPaused && State.paused){
+      tEchoPred = State.t_plus + State.t_minus;
+      echoLabel = 'echo';
+    } else if (State.phase === 'plus'  && State.t_minus > State.t_plus)  tEchoPred = 2 * State.t_minus;
+    else if (State.phase === 'minus' && State.t_plus  > State.t_minus) tEchoPred = 2 * State.t_plus;
+    if (tEchoPred != null && tEchoPred <= tMax){
+      const xEcho = innerX + innerW * (tEchoPred / tMax);
+      ctx.strokeStyle = '#c0392b';
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      ctx.moveTo(xEcho, innerY);
+      ctx.lineTo(xEcho, innerY + innerH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#c0392b';
+      ctx.textAlign = 'right';
+      ctx.fillText(echoLabel, xEcho - 3, innerY + 12);
+    }
+
+    // Trace line
+    if (State.history.length > 1){
+      ctx.strokeStyle = '#f3cf4a';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      for (let i=0; i<State.history.length; i++){
+        const h = State.history[i];
+        const xx = innerX + innerW * Math.min(1, h.t / tMax);
+        const yy = innerY + innerH * (1 - h.signal);
+        if (i === 0) ctx.moveTo(xx, yy);
+        else ctx.lineTo(xx, yy);
+      }
+      ctx.stroke();
+
+      // Current value marker + readout
+      const last = State.history[State.history.length-1];
+      const xx = innerX + innerW * Math.min(1, last.t / tMax);
+      const yy = innerY + innerH * (1 - last.signal);
+      ctx.fillStyle = '#fff0a8';
+      ctx.beginPath();
+      ctx.arc(xx, yy, 3.5, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.fillStyle = '#fff0a8';
+      ctx.font = '700 14px ui-monospace, Menlo, Consolas, monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText((last.signal * 100).toFixed(0) + '%', innerX + innerW - 6, innerY + 18);
+    } else if (State.phase === 'idle') {
+      ctx.fillStyle = '#8aa39f';
+      ctx.font = '12px -apple-system,Segoe UI,Roboto';
+      ctx.textAlign = 'center';
+      ctx.fillText('Apply RF Pulse to begin recording the net signal.',
+                   innerX + innerW/2, innerY + innerH/2);
+    }
+  }
+
+  // ---- Animation loop ----
+  let lastTs = null;
+  function tick(ts){
+    if (!lastTs) lastTs = ts;
+    const dtReal = (ts - lastTs)/1000;
+    lastTs = ts;
+
+    if (!State.paused){
+      const dtSim = dtReal * 60 * State.speed;   // 1 real second = 60 ms simulated × speed
+      if (State.phase === 'plus')  State.t_plus  += dtSim;
+      else if (State.phase === 'minus') State.t_minus += dtSim;
+
+      // Sample net signal (skip while idle; while 'rf' the single t=0 sample is enough)
+      if (State.phase === 'plus' || State.phase === 'minus'){
+        const t = State.t_plus + State.t_minus;
+        const last = State.history[State.history.length-1];
+        if (!last || t - last.t > 0.5){
+          State.history.push({ t, signal: computeSignal() });
+          if (State.history.length > State.historyMax) State.history.shift();
+        }
+      }
+
+      // Auto-mode: walk the sequence rf → plus → minus, with a brief dephasing window.
+      if (State.autoMode){
+        if (State.phase === 'rf') startPlus();
+        else if (State.phase === 'plus' && State.t_plus >= 60) startMinus();
+      }
+
+      // Auto-pause at every echo: whenever (t_plus - t_minus) crosses zero, the mirrored
+      // speed map makes every column accumulate the same gradient phase, so all spins
+      // align at a common angle. echoPaused resets on each reversal, so subsequent toggles
+      // produce subsequent pause-at-echo events.
+      if (State.phase === 'plus' || State.phase === 'minus'){
+        const diff = State.t_plus - State.t_minus;
+        if (!State.echoPaused && State.lastDiff !== 0 && Math.sign(diff) !== Math.sign(State.lastDiff)){
+          State.paused = true;
+          State.echoPaused = true;
+          btnPause.textContent = 'Resume';
+        }
+        State.lastDiff = diff;
+      }
+
+      updateStatus();
+    }
+
+    draw();
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  function updateStatus(){
+    if (State.phase === 'idle'){
+      statusEl.innerHTML = `Ready. Click <b>Apply RF Pulse</b> to tip the spins into the transverse plane.`;
+      return;
+    }
+    if (State.phase === 'rf'){
+      statusEl.innerHTML = `<b>RF applied:</b> all spins aligned at 0°, signal at 100%. Click <b>Apply +G</b> to start dephasing.`;
+      return;
+    }
+    const diff = State.t_plus - State.t_minus;
+    const here = State.phase === 'plus' ? '+G' : '−G';
+    const next = State.phase === 'plus' ? '−G' : '+G';
+    // Refocusing: the gradient currently on is driving |diff| toward 0.
+    const refocusing = (State.phase === 'plus' && diff < 0) || (State.phase === 'minus' && diff > 0);
+    if (Math.abs(diff) <= 2){
+      statusEl.innerHTML = `<b>Echo!</b> Every spin reaches the same accumulated angle — slow ones caught up, fast ones held back. Residual fan-out is T2* (not refocused by speed mirroring). Click <b>Apply ${next}</b> to keep going.`;
+    } else if (refocusing){
+      const rem = Math.abs(diff).toFixed(0);
+      statusEl.innerHTML = `<b>Refocusing under ${here}:</b> mirrored speeds catching the spread up — ~${rem} ms until echo (when t<sub>+G</sub> = t<sub>−G</sub>). Click <b>Apply ${next}</b> to reverse again.`;
+    } else {
+      statusEl.innerHTML = `<b>Dephasing under ${here}:</b> spins fanning out, signal collapsing. Click <b>Apply ${next}</b> to reverse and start refocusing.`;
+    }
+  }
+
+  // ---- Controls ----
+  function readSliders(){
+    State.G     = +gSlider.value;   gVal.textContent   = State.G.toFixed(2);
+    State.inhom = +t2sSlider.value;
+    t2sVal.textContent = State.inhom === 0 ? 'none' :
+                         State.inhom < 0.6 ? 'small' :
+                         State.inhom < 1.3 ? 'medium' : 'large';
+    State.speed = +spdSlider.value; spdVal.textContent = State.speed.toFixed(2)+'×';
+    const newCols = +gridSlider.value;
+    if (newCols !== State.cols){
+      State.cols = newCols;
+      State.rows = Math.max(3, Math.round(newCols * 0.55));
+      rebuildOffsets();
+      rebuildRestAngles();
+    }
+    gridVal.textContent = `${State.cols} × ${State.rows}`;
+  }
+  [gSlider, t2sSlider, spdSlider, gridSlider]
+    .forEach(s=>s.addEventListener('input', ()=>{ readSliders(); draw(); }));
+
+  function reset(){
+    State.phase = 'idle';
+    State.paused = false;
+    State.t_plus = 0;
+    State.t_minus = 0;
+    State.autoMode = false;
+    State.echoPaused = false;
+    State.history = [];
+    State.switches = [];
+    State.lastDiff = 0;
+    btnRF.disabled    = false;
+    btnPlus.disabled  = true;
+    btnMinus.disabled = true;
+    btnPause.textContent = 'Pause';
+    State.randSeed = (State.randSeed * 1103515245 + 12345) >>> 0;
+    rebuildOffsets();
+    rebuildRestAngles();
+    updateStatus();
+    draw();
+  }
+  function applyRF(){
+    reset();
+    State.phase = 'rf';
+    State.history.push({ t: 0, signal: 1 });
+    btnRF.disabled    = true;
+    btnPlus.disabled  = false;
+    btnMinus.disabled = true;
+    updateStatus();
+  }
+  function startPlus(){
+    if (State.phase !== 'rf' && State.phase !== 'minus') return;
+    if (State.phase === 'minus'){
+      State.switches.push({ t: State.t_plus + State.t_minus, kind: 'plus' });
+    }
+    State.phase = 'plus';
+    State.echoPaused = false;
+    State.paused = false;
+    btnPause.textContent = 'Pause';
+    btnPlus.disabled  = true;
+    btnMinus.disabled = false;
+    updateStatus();
+  }
+  function startMinus(){
+    if (State.phase !== 'plus') return;
+    State.switches.push({ t: State.t_plus + State.t_minus, kind: 'minus' });
+    State.phase = 'minus';
+    State.echoPaused = false;
+    State.paused = false;
+    btnPause.textContent = 'Pause';
+    btnMinus.disabled = true;
+    btnPlus.disabled  = false;
+    updateStatus();
+  }
+  function autoPlay(){
+    reset();
+    applyRF();
+    State.autoMode = true;
+  }
+  function togglePause(){
+    if (State.phase === 'idle') return;
+    State.paused = !State.paused;
+    btnPause.textContent = State.paused ? 'Resume' : 'Pause';
+  }
+
+  btnRF.addEventListener('click', applyRF);
+  btnPlus.addEventListener('click', startPlus);
+  btnMinus.addEventListener('click', startMinus);
+  btnAuto.addEventListener('click', autoPlay);
+  btnPause.addEventListener('click', togglePause);
+  btnReset.addEventListener('click', reset);
+
+  document.addEventListener('keydown', e=>{
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    if (e.key==='1') applyRF();
+    else if (e.key==='2') startPlus();
+    else if (e.key==='3') startMinus();
+    else if (e.key===' ') { e.preventDefault(); togglePause(); }
+    else if (e.key==='r' || e.key==='R') reset();
+  });
+
+  readSliders();
+  reset();
+})();
+</script>
+</body>
+</html>
