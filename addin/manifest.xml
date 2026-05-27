@@ -8,7 +8,7 @@
   <ProviderName>Juvenius Martin</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Gradient Echo" />
-  <Description DefaultValue="Interactive gradient echo visualization. Fire an RF pulse, apply a dephasing gradient, then reverse it to refocus the spins as a gradient echo. Shows that the echo peak rides the T2* envelope (not T2) — the defining limitation of GRE versus spin echo." />
+  <Description DefaultValue="Interactive gradient echo visualization. Fire an RF pulse, apply a dephasing gradient, then reverse it to refocus the spins as a gradient echo. The echo peak rides the T2* envelope (not T2): the defining limit of GRE vs. spin echo." />
   <IconUrl DefaultValue="https://juveniusm.github.io/greapp/addin/icon-64.png" />
   <HighResolutionIconUrl DefaultValue="https://juveniusm.github.io/greapp/addin/icon-128.png" />
   <SupportUrl DefaultValue="https://github.com/juveniusm/greapp" />
