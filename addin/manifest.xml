@@ -20,7 +20,7 @@
   </Hosts>
   <DefaultSettings>
     <SourceLocation DefaultValue="https://juveniusm.github.io/greapp/index.html" />
-    <RequestedHeight>600</RequestedHeight>
+    <RequestedHeight>500</RequestedHeight>
     <RequestedWidth>800</RequestedWidth>
   </DefaultSettings>
   <Permissions>Restricted</Permissions>

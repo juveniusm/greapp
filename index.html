@@ -215,7 +215,7 @@
     const dpr = window.devicePixelRatio || 1;
     const rect = c.getBoundingClientRect();
     const cssW = Math.max(640, Math.floor(rect.width));
-    const cssH = Math.max(560, Math.floor(cssW * 0.66));
+    const cssH = Math.max(460, Math.floor(cssW * 0.55));
     c.width  = cssW * dpr;
     c.height = cssH * dpr;
     c.style.height = cssH + 'px';
